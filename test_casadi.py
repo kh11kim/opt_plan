@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import jax
 
 class JaxFn(cs.Callback):
-    def __init__(self, x_dim, y_dim, fn, isjac=False, opts={}):
+    def __init__(self, x_dim, y_dim, fn, inames=None, onames=None, opts={}):
         """
         t_in: list of inputs (tensorflow placeholders)
         t_out: list of outputs (tensors dependeant on those placeholders)
@@ -12,34 +12,45 @@ class JaxFn(cs.Callback):
         cs.Callback.__init__(self)
         self.x_dim = x_dim
         self.y_dim = y_dim
-        self.isjac = isjac
+        self.inames = inames
+        self.onames = onames
         self.construct("JaxFn", opts)
         self.fn = jax.jit(fn)
+        self.jit_fn = jax.jit(fn).lower(jnp.zeros(x_dim)).compile()
         self.refs = []
 
-    def get_n_in(self): return 1 if self.isjac else 1
+    def get_n_in(self): return 1
     def get_n_out(self): return 1
+    def get_name_in(self, i):
+        if self.inames is None:
+            return f"i{i}"
+        else:
+            return self.inames[i]
+    def get_name_out(self, i):
+        if self.onames is None:
+            return f"o{i}"
+        else:
+            return self.onames[i]
 
     def get_sparsity_in(self,i):
-        return cs.Sparsity.dense(*self.x_dim)
+        return cs.Sparsity.dense(self.x_dim, 1)
 
     def get_sparsity_out(self,i):
-        return cs.Sparsity.dense(*self.y_dim)
+        return cs.Sparsity.dense(self.y_dim, 1)
 
     def eval(self, arg):
-        # Associate each tensorflow input with the numerical argument passed by CasADi
         x = jnp.asarray(arg[0]).flatten()
-        ret = self.fn(x).flatten()
-        return [cs.reshape(cs.vertcat(ret), *self.y_dim)]
+        ret = self.jit_fn(x).flatten()
+        return [cs.reshape(cs.vertcat(ret), self.y_dim, 1)]
 
     def has_jacobian(self): return True
-    def get_jacobian(self,name,inames,onames,opts):
-        jac_fn = jax.jit(jax.jacrev(self.fn))
+    def get_jacobian(self, name, inames, onames, opts):
+        jac_fn = jax.jit(jax.jacrev(self.fn)).lower(jnp.zeros(self.x_dim)).compile()
         class JacFun(cs.Callback):
             def __init__(self, dim_in, dim_out, fn, opts={}):
                 self.dim_in = dim_in
                 self.dim_out = dim_out
-                self.dim_jac = (self.dim_out[0], self.dim_in[0])
+                self.dim_jac = (self.dim_out, self.dim_in)
                 self.fn = fn
                 cs.Callback.__init__(self)
                 self.construct(name, opts)
@@ -49,9 +60,9 @@ class JaxFn(cs.Callback):
 
             def get_sparsity_in(self,i):
                 if i==0: # nominal input
-                    return cs.Sparsity.dense(self.dim_in)
+                    return cs.Sparsity.dense(self.dim_in, 1)
                 elif i==1: # nominal output
-                    return cs.Sparsity.dense(self.dim_out)
+                    return cs.Sparsity.dense(self.dim_out, 1)
 
             def get_sparsity_out(self,i):
                 return cs.Sparsity.dense(self.dim_jac)
@@ -63,6 +74,8 @@ class JaxFn(cs.Callback):
             
         self.jac_callback = JacFun(self.x_dim, self.y_dim, jac_fn)
         return self.jac_callback
+
+
 
 # fn = lambda x: x[0]*x[3]*jnp.sum(x[:3]) + x[2]
 # #fns = lambda x: jnp.vstack([[fn(x), fn(x)],[fn(x), fn(x)]])
