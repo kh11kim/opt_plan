@@ -60,15 +60,16 @@ class RobotPointCloud:
             idx += len(link_points)
         return robot_points
 
-def get_pointclouds(mesh_path, obj_file_names):
+def get_pointclouds(mesh_path, obj_file_names, num_points_per_link=100):
     linkpcs = []
     num_points = 0
     for name in obj_file_names:
         mesh = trimesh.load(mesh_path/ (name+".obj"))
         if isinstance(mesh, trimesh.Scene):
             mesh = mesh.dump().sum()
-        points, _ = trimesh.sample.sample_surface_even(mesh, 100)
+        points, _ = trimesh.sample.sample_surface_even(mesh, num_points_per_link)
         linkpcs.append(LinkPointCloud(name, points, len(points)))
         num_points += len(points)
     robotpc = RobotPointCloud(tuple(linkpcs), num_points)
     return robotpc
+
