@@ -40,8 +40,8 @@ class EnvSDF:
     def penetration(self, points, num_points:int, safe_dist:float=0.):
         result = jnp.zeros(num_points)
         for sdf in self.sdfs:
-            result = jnp.maximum(sdf.penetration(points), result)
-        return result + safe_dist
+            result = jnp.maximum((sdf.penetration(points) + safe_dist), result)
+        return result**2
     
     def penetration_sum(self, points, num_points:int, safe_dist:float=0.):
         return self.penetration(points, num_points, safe_dist).sum()
