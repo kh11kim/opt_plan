@@ -8,6 +8,18 @@ def value_and_jacrev(x, f):
     jac = jax.vmap(pullback)(basis)[0]
     return y, jac
 
+def regularized_hess(P):
+    def regularization(P):
+        eigs, vecs = jnp.linalg.eigh(P)
+        delta = 1e-6
+        eigs_modified = jnp.where(eigs < delta, delta, eigs) #jnp.maximum(-eigs, delta)
+        return vecs @ jnp.diag(eigs_modified) @ vecs.T
+    def identity(P):
+        return P
+    #is_not_pos_def = jnp.isnan(jnp.linalg.cholesky(P)).any()
+    #P = jax.lax.cond(is_not_pos_def, regularization, identity, P)    
+    return regularization(P)
+
 class NLPBuilder:
     def __init__(self, dim):
         self.dim = dim
@@ -86,6 +98,23 @@ class NLPBuilder:
             return f(x) + sigma * (eq_norm + ineq_norm)
         return merit_fn
     
+    def get_merit_direc_deriv_fn(self):
+        g = self.get_g()
+        h = self.get_h()
+        f_grad_fn = jax.grad(self.f)
+        eq_dim = self.g_dim
+        ineq_dim = self.h_dim
+        def merit_direc_deriv(x, direction, sigma):
+            direct_deriv = f_grad_fn(x) @ direction
+            if eq_dim != 0:
+                eq_1norm = jnp.linalg.norm(g(x), 1)
+            else:
+                eq_1norm = 0.
+            ineq_1norm = 0. if ineq_dim == 0 \
+                else jnp.linalg.norm(jnp.clip(h(x),a_min=0.), 1)
+            return direct_deriv - sigma * (eq_1norm + ineq_1norm)
+        return merit_direc_deriv
+    
     def get_PqGhAb_fn(self):
         lag_hess_fn = jax.hessian(self.get_lagrangian_fn())
         f_grad_fn = jax.grad(self.f)
@@ -117,11 +146,6 @@ class NLPBuilder:
         value_and_jac_h = partial(value_and_jacrev, f=self.get_h())
         eq_dim = self.g_dim
         ineq_dim = self.h_dim
-        def regularized_hess(P):
-            eigs, vecs = jnp.linalg.eigh(P)
-            delta = 1e-6
-            eigs_modified = jnp.where(eigs < delta, jnp.maximum(-eigs, delta), eigs) #jnp.maximum(-eigs, delta)
-            return vecs @ jnp.diag(eigs_modified) @ vecs.T
         
         def PqAlu(x, lmbda):
             #exact newton
