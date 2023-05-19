@@ -46,18 +46,22 @@ class EnvSDF(SDF):
     def task_space_potential(self, d):
         def free(d):
             return 0.
-        # def in_safe_dist(d):
-        #     return 1/(2*self.safe_dist)*(d-self.safe_dist)**2
-        # def in_col(d):
-        #     return -d + 1/2*self.safe_dist
+        def in_safe_dist(d):
+            return 1/(2*self.safe_dist)*(d-self.safe_dist)**2
         def in_col(d):
-            return (d - self.safe_dist)**2
+            return -d + 1/2*self.safe_dist
         is_in_col = d - self.safe_dist < 0.
-        #is_in_safe_dist = (0. <= d) & (d <= self.safe_dist)
-        # is_free = safe_dist < d
-        #switch_var = is_in_col + is_in_safe_dist*2
-        #return jax.lax.switch(switch_var, [free, in_col, in_safe_dist], d)
-        return jax.lax.cond(is_in_col, in_col, free, d)
+        is_in_safe_dist = (0. <= d) & (d <= self.safe_dist)
+        
+        switch_var = is_in_col + is_in_safe_dist*2
+        return jax.lax.switch(switch_var, [free, in_col, in_safe_dist], d)
+
+        # def free(d):
+        #     return 0.
+        # def in_col(d):
+        #     return (d - self.safe_dist)**2
+        # is_in_col = d - self.safe_dist < 0.
+        # return jax.lax.cond(is_in_col, in_col, free, d)
     
     def distance(self, point):
         min_dist = jnp.inf
