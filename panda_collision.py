@@ -50,26 +50,34 @@ class LinkPointCloud:
 @jdc.pytree_dataclass
 class RobotPointCloud:
     pcs: Tuple[LinkPointCloud]
-    num_points: int
+    num_link_points: int
     def apply_transforms(self, poses:Array):
-        robot_points = jnp.zeros((self.num_points, 3))
-        idx = 0
+        robot_points = jnp.zeros((len(self.pcs), self.num_link_points, 3))
         for i in range(len(self.pcs)):
             link_points = self.pcs[i].transform(SE3(poses[i]))
-            robot_points = robot_points.at[idx:idx+len(link_points)].set(link_points)
-            idx += len(link_points)
+            robot_points = robot_points.at[i, :, :].set(link_points)
+            #idx += len(link_points)
         return robot_points
 
-def get_pointclouds(mesh_path, obj_file_names, num_points_per_link=100):
+    # def apply_transforms(self, poses:Array):
+    #     robot_points = jnp.zeros((self.num_points, 3))
+    #     idx = 0
+    #     for i in range(len(self.pcs)):
+    #         link_points = self.pcs[i].transform(SE3(poses[i]))
+    #         robot_points = robot_points.at[idx:idx+len(link_points)].set(link_points)
+    #         idx += len(link_points)
+    #     return robot_points
+
+def get_pointclouds(mesh_path, obj_file_names, num_link_points=100):
     linkpcs = []
     num_points = 0
     for name in obj_file_names:
         mesh = trimesh.load(mesh_path/ (name+".obj"))
         if isinstance(mesh, trimesh.Scene):
             mesh = mesh.dump().sum()
-        points, _ = trimesh.sample.sample_surface_even(mesh, num_points_per_link)
+        points, _ = trimesh.sample.sample_surface(mesh, num_link_points)
         linkpcs.append(LinkPointCloud(name, points, len(points)))
         num_points += len(points)
-    robotpc = RobotPointCloud(tuple(linkpcs), num_points)
+    robotpc = RobotPointCloud(tuple(linkpcs), num_link_points)
     return robotpc
 
