@@ -235,6 +235,7 @@ class SQPSolver:
             "show_progress":False,
         }
         self.history = []
+        self.states = []
 
         x = x0.copy()
         m = jnp.zeros(self.const_dim)
